@@ -147,11 +147,11 @@ def decode_packet(packet):
 			switch = value
 		else:
 			if switch:
-				client.publish("rflink/"+name+"/"+id+"/"+switch, value, 0)
-				logger.info("rflink/%s/%s/%s / value: %s" % (name, id, switch, value))
+				client.publish("rflink/"+id+"/"+name+"/"+switch, value, 0)
+				logger.info("rflink/%s/%s/%s / value: %s" % (id, name, switch, value))
 			else:
-				client.publish("rflink/"+name+"/"+id, value, 0)
-				logger.info("rflink/%s/%s / value: %s" % (name, id, value))
+				client.publish("rflink/"+id+"/"+name, value, 0)
+				logger.info("rflink/%s/%s / value: %s" % (id, name, value))
 		
 	if find == 0:
 		client.publish("rflink/rx", packet, 0)
@@ -180,8 +180,10 @@ if __name__ == '__main__':
     logger.error(f"Not possible to flash device:{USB_INTERFACE}")
 
 
-  client = mqtt.Client()
-  if MQTT_USERNAME and MQTT_PWD:
+#  client = mqtt.Client()
+#  client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+  client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+	if MQTT_USERNAME and MQTT_PWD:
     client.username_pw_set(MQTT_USERNAME, MQTT_PWD)
   client.connect(MQTT_SERVER, int(MQTT_PORT))
   client.on_connect = on_connect
