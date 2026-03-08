@@ -1,4 +1,7 @@
-# rflink2mqtt
+# rflink2mqtt-homeassistant
+This is updated - RFLink-> mqtt -> HomeAssistant Autodiscover  
+
+
 Python script to send rflink data to MQTT with sensors decodage.
 
 ## Docker
