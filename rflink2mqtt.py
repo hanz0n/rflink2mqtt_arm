@@ -2,198 +2,268 @@
 
 import serial
 import paho.mqtt.client as mqtt
-from typing import Any, Callable, Dict, Generator, cast
 import os
 import logging
+import json
+
+# -----------------------------
+# Logging
+# -----------------------------
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-logger = logging.getLogger('rflink2mqtt')
+logger = logging.getLogger("rflink2mqtt")
 logger.setLevel(logging.DEBUG)
 
 consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(formatter)
 logger.addHandler(consoleHandler)
 
-# Get environment variables
-USB_INTERFACE = os.environ.get('USB_INTERFACE')
-MQTT_SERVER = os.environ.get('MQTT_SERVER')
-MQTT_PORT = os.environ.get('MQTT_PORT', 1883)
-MQTT_USERNAME = os.environ.get('MQTT_USERNAME', None)
-MQTT_PWD = os.environ.get('MQTT_PWD', None)
+# -----------------------------
+# Environment variables
+# -----------------------------
 
+USB_INTERFACE = os.environ.get("USB_INTERFACE", "/dev/ttyUSB0")
+MQTT_SERVER = os.environ.get("MQTT_SERVER", "localhost")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
+MQTT_USERNAME = os.environ.get("MQTT_USERNAME")
+MQTT_PWD = os.environ.get("MQTT_PWD")
 
-serialdev = USB_INTERFACE
-DELIM = ';'
+DELIM = ";"
 
-def signed_to_float(hex):
-  """Convert signed hexadecimal to floating value."""
-  if int(hex, 16) & 0x8000:
-      return -(int(hex, 16) & 0x7FFF) / 10.0
-  else:
-      return int(hex, 16) / 10.0
-
-
-VALUE_TRANSLATION = cast(Dict[str, Callable], {
-  'awinsp': lambda hex: int(hex, 16) / 10,
-  'baro': lambda hex: int(hex, 16),
-  'bforecast': lambda x: BFORECAST_LOOKUP.get(x, 'Unknown'),
-  'chime': int,
-  'co2': int,
-  'current': int,
-  'current2': int,
-  'current3': int,
-  'dist': int,
-  'hstatus': lambda x: HSTATUS_LOOKUP.get(x, 'Unknown'),
-  'hum': int,
-  'kwatt': lambda hex: int(hex, 16),
-  'lux': lambda hex: int(hex, 16),
-  'meter': int,
-  'rain': lambda hex: int(hex, 16) / 10,
-  'rainrate': lambda hex: int(hex, 16) / 10,
-  'raintot': lambda hex: int(hex, 16) / 10,
-  'sound': int,
-  'temp': signed_to_float,
-  'uv': lambda hex: int(hex, 16),
-  'volt': int,
-  'watt': lambda hex: int(hex, 16),
-  'winchl': signed_to_float,
-  'windir': lambda windir: int(windir) * 22.5,
-  'wings': lambda hex: int(hex, 16) / 10,
-  'winsp': lambda hex: int(hex, 16) / 10,
-  'wintmp': signed_to_float,
-})
-
-PACKET_FIELDS = {
-  'awinsp': 'average_windspeed',
-  'baro': 'barometric_pressure',
-  'bat': 'battery',
-  'bforecast': 'weather_forecast',
-  'chime': 'doorbell_melody',
-  'cmd': 'command',
-  'co2': 'co2_air_quality',
-  'current': 'current_phase_1',
-  'current2': 'current_phase_2',
-  'current3': 'current_phase_3',
-  'dist': 'distance',
-  'fw': 'firmware',
-  'hstatus': 'humidity_status',
-  'hum': 'humidity',
-  'hw': 'hardware',
-  'kwatt': 'kilowatt',
-  'lux': 'light_intensity',
-  'meter': 'meter_value',
-  'rain': 'total_rain',
-  'rainrate': 'rain_rate',
-  'raintot': 'total_rain',
-  'rev': 'revision',
-  'sound': 'noise_level',
-  'temp': 'temperature',
-  'uv': 'uv_intensity',
-  'ver': 'version',
-  'volt': 'voltage',
-  'watt': 'watt',
-  'winchl': 'windchill',
-  'windir': 'winddirection',
-  'wings': 'windgusts',
-  'winsp': 'windspeed',
-  'wintmp': 'windtemp',
-}
+# -----------------------------
+# Lookups
+# -----------------------------
 
 HSTATUS_LOOKUP = {
-  '0': 'normal',
-  '1': 'comfortable',
-  '2': 'dry',
-  '3': 'wet',
-}
-BFORECAST_LOOKUP = {
-  '0': 'no_info',
-  '1': 'sunny',
-  '2': 'partly_cloudy',
-  '3': 'cloudy',
-  '4': 'rain',
+    "0": "normal",
+    "1": "comfortable",
+    "2": "dry",
+    "3": "wet",
 }
 
-def on_connect(client, userdata, flags, reason_code, properties=None):
+BFORECAST_LOOKUP = {
+    "0": "no_info",
+    "1": "sunny",
+    "2": "partly_cloudy",
+    "3": "cloudy",
+    "4": "rain",
+}
+
+# -----------------------------
+# Value translation
+# -----------------------------
+
+def signed_to_float(hex_value):
+    value = int(hex_value, 16)
+    if value & 0x8000:
+        return -(value & 0x7FFF) / 10.0
+    return value / 10.0
+
+
+VALUE_TRANSLATION = {
+    "temp": signed_to_float,
+    "hum": int,
+    "baro": lambda x: int(x, 16),
+    "rain": lambda x: int(x, 16) / 10,
+    "rainrate": lambda x: int(x, 16) / 10,
+    "raintot": lambda x: int(x, 16) / 10,
+    "winsp": lambda x: int(x, 16) / 10,
+    "awinsp": lambda x: int(x, 16) / 10,
+    "wings": lambda x: int(x, 16) / 10,
+    "windir": lambda x: int(x) * 22.5,
+    "uv": lambda x: int(x, 16),
+    "lux": lambda x: int(x, 16),
+    "kwatt": lambda x: int(x, 16),
+    "watt": lambda x: int(x, 16),
+}
+
+PACKET_FIELDS = {
+    "temp": "temperature",
+    "hum": "humidity",
+    "baro": "barometric_pressure",
+    "rain": "total_rain",
+    "rainrate": "rain_rate",
+    "raintot": "total_rain",
+    "winsp": "windspeed",
+    "awinsp": "average_windspeed",
+    "wings": "windgust",
+    "windir": "winddirection",
+    "uv": "uv",
+    "lux": "lux",
+    "kwatt": "kilowatt",
+    "watt": "watt",
+}
+
+# -----------------------------
+# MQTT
+# -----------------------------
+
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+
+if MQTT_USERNAME and MQTT_PWD:
+    client.username_pw_set(MQTT_USERNAME, MQTT_PWD)
+
+discovered = set()
+
+# -----------------------------
+# Home Assistant discovery
+# -----------------------------
+
+def publish_discovery(device_id, name):
+
+    uid = f"rflink_{device_id}_{name}"
+
+    if uid in discovered:
+        return
+
+    topic = f"homeassistant/sensor/rflink/{uid}/config"
+
+    payload = {
+        "name": f"RFLink {device_id} {name}",
+        "state_topic": f"rflink/{device_id}/{name}",
+        "unique_id": uid,
+        "device": {
+            "identifiers": [f"rflink_{device_id}"],
+            "name": f"RFLink {device_id}",
+            "manufacturer": "RFLink"
+        }
+    }
+
+    client.publish(topic, json.dumps(payload), retain=True)
+
+    discovered.add(uid)
+
+    logger.info(f"Discovery published: {topic}")
+
+# -----------------------------
+# MQTT callbacks
+# -----------------------------
+
+def on_connect(client, userdata, flags, reason_code, properties):
+
     if reason_code == 0:
-        logger.info(f"Connected to host:{MQTT_SERVER} , code:{reason_code}")
-        client.subscribe("rflink2/tx", 0)
-        logger.info("subscribed to: rflink2/tx")
+        logger.info(f"Connected to MQTT {MQTT_SERVER}")
+        client.subscribe("rflink2/tx")
     else:
-        logger.error(f"Not connected to host:{MQTT_SERVER} , code:{reason_code}")
+        logger.error(f"MQTT connection failed: {reason_code}")
+
 
 def on_message(client, userdata, message):
-	logger.info(f"Send to RFLINK " + str(message.payload.decode("utf-8")))
-	ser.write(message.payload + "\r\n".encode('utf-8'))
 
-def decode_packet(packet):
-	try:
-		node_id, _, protocol, attrs = x.split(DELIM, 3)
-	except ValueError:
-		logger.error(f"Could not split line: {packet}")
-		return
+    payload = message.payload.decode("utf-8")
 
-	logger.info(f"node_id:{node_id}, protocol: {protocol}")
-	switch = None
-	find = 0
-	for attr in filter(None, attrs.strip(DELIM).split(DELIM)):
-		key, value = attr.lower().split('=')
-		find = 1
-		if key in VALUE_TRANSLATION:
-			value = VALUE_TRANSLATION.get(key)(value)
-		name = PACKET_FIELDS.get(key, key)
-		if key == "id":
-			id = value
-		elif key == "switch":
-			switch = value
-		else:
-			if switch:
-				client.publish("rflink/"+id+"/"+name+"/"+switch, value, 0)
-				logger.info("rflink/%s/%s/%s / value: %s" % (id, name, switch, value))
-			else:
-				client.publish("rflink/"+id+"/"+name, value, 0)
-				logger.info("rflink/%s/%s / value: %s" % (id, name, value))
-		
-	if find == 0:
-		client.publish("rflink/rx", packet, 0)
-		logger.error(f"not find protocol of other: {packet}")
-		
-	return 
+    logger.info(f"Send to RFLink: {payload}")
+
+    ser.write((payload + "\r\n").encode())
 
 
+client.on_connect = on_connect
+client.on_message = on_message
 
-if __name__ == '__main__':
+# -----------------------------
+# Serial
+# -----------------------------
 
-  ser = serial.Serial(
-  port=serialdev,
-  baudrate = 57600,
-  parity=serial.PARITY_NONE,
-  stopbits=serial.STOPBITS_ONE,
-  bytesize=serial.EIGHTBITS,
-  timeout=None
-)
+try:
 
-  try:
+    ser = serial.Serial(
+        port=USB_INTERFACE,
+        baudrate=57600,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        bytesize=serial.EIGHTBITS,
+        timeout=None
+    )
+
     ser.flushInput()
     ser.flushOutput()
-    logger.info(f"Connected to device:{USB_INTERFACE}")
-  except:
-    logger.error(f"Not possible to flash device:{USB_INTERFACE}")
 
+    logger.info(f"Connected to serial device {USB_INTERFACE}")
 
-#  client = mqtt.Client()
-#  client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
-  client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-	if MQTT_USERNAME and MQTT_PWD:
-    client.username_pw_set(MQTT_USERNAME, MQTT_PWD)
-  client.connect(MQTT_SERVER, int(MQTT_PORT))
-  client.on_connect = on_connect
-  client.on_message = on_message
-  client.loop_start()
+except Exception as e:
 
-  while True:
-    x=ser.readline()
-    x = x.decode("utf-8").strip("\r\n")
+    logger.error(f"Could not open serial device {USB_INTERFACE}")
+    raise e
+
+# -----------------------------
+# Packet decoding
+# -----------------------------
+
+def decode_packet(packet):
+
     try:
-        decode_packet(x)
+        node_id, _, protocol, attrs = packet.split(DELIM, 3)
     except ValueError:
-      logger.error("Error in decode packet")
+        logger.debug(f"Ignored line: {packet}")
+        return
+
+    logger.info(f"Protocol: {protocol}")
+
+    device_id = None
+    switch = None
+
+    for attr in filter(None, attrs.strip(DELIM).split(DELIM)):
+
+        if "=" not in attr:
+            continue
+
+        key, value = attr.lower().split("=")
+
+        if key == "id":
+            device_id = value
+            continue
+
+        if key == "switch":
+            switch = value
+            continue
+
+        if key in VALUE_TRANSLATION:
+            value = VALUE_TRANSLATION[key](value)
+
+        name = PACKET_FIELDS.get(key, key)
+
+        if not device_id:
+            continue
+
+        if switch:
+            topic = f"rflink/{device_id}/{name}/{switch}"
+        else:
+            topic = f"rflink/{device_id}/{name}"
+
+        publish_discovery(device_id, name)
+
+        client.publish(topic, value)
+
+        logger.info(f"{topic} -> {value}")
+
+# -----------------------------
+# Start MQTT
+# -----------------------------
+
+client.connect(MQTT_SERVER, MQTT_PORT)
+client.loop_start()
+
+# -----------------------------
+# Main loop
+# -----------------------------
+
+logger.info("RFLink -> MQTT bridge started")
+
+while True:
+
+    try:
+
+        line = ser.readline()
+
+        if not line:
+            continue
+
+        line = line.decode("utf-8").strip()
+
+        logger.debug(f"RX: {line}")
+
+        decode_packet(line)
+
+    except Exception as e:
+
+        logger.error(f"Error processing packet: {e}")
