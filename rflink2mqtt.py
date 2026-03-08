@@ -113,13 +113,13 @@ BFORECAST_LOOKUP = {
   '4': 'rain',
 }
 
-def on_connect(client, userdata, flags, rc):
-  if rc == 0:
-    logger.info(f"Connected to host:{MQTT_SERVER} , code:{rc}")
-    client.subscribe("rflink2/tx",0)
-    logger.info(f"subscribed to: rflink2/tx")
-  else:
-     logger.error(f"Not connected to host:{MQTT_SERVER} , code:{rc}")
+def on_connect(client, userdata, flags, reason_code, properties=None):
+    if reason_code == 0:
+        logger.info(f"Connected to host:{MQTT_SERVER} , code:{reason_code}")
+        client.subscribe("rflink2/tx", 0)
+        logger.info("subscribed to: rflink2/tx")
+    else:
+        logger.error(f"Not connected to host:{MQTT_SERVER} , code:{reason_code}")
 
 def on_message(client, userdata, message):
 	logger.info(f"Send to RFLINK " + str(message.payload.decode("utf-8")))
