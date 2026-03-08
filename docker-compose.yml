@@ -9,7 +9,7 @@ services:
       - "/dev/ttyACM0:/dev/ttyACM0"
     # - "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0042_85635303433351F050A1-if00:/dev/ttyACM0" # ls -l /dev/serial/by-id/
     environment:
-      - "MQTT_SERVER=mosquitto"
+      - "MQTT_SERVER=127.0.0.1"
       - "MQTT_PORT=1883"
       - "USB_INTERFACE=/dev/ttyACM0"
     restart: always
