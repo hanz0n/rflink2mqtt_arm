@@ -1,6 +1,3 @@
-#command to build (in api directory): sudo docker build -f Dockerfile -t mickaelh51/rflink2mqtt .
-#to run it: sudo docker run --rm -i -t --name rflink2mqtt --network swarm-homeassistant -e USB_INTERFACE=/dev/ttyACM2 -e MQTT_SERVER=mosquitto --device /dev/ttyACM2:/dev/ttyACM2 mickaelh51/rflink2mqtt
-
 from python:3.10-slim-buster
 
 ARG BUILD_DATE
